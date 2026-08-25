@@ -50,6 +50,11 @@
       ]
     },
     {
+      "name": "vector_math",
+      "version": "2.4.0",
+      "dependencies": []
+    },
+    {
       "name": "test_api",
       "version": "0.7.12",
       "dependencies": [
@@ -81,6 +86,11 @@
     {
       "name": "path",
       "version": "1.9.1",
+      "dependencies": []
+    },
+    {
+      "name": "meta",
+      "version": "1.18.3",
       "dependencies": []
     },
     {
@@ -153,11 +163,6 @@
       "dependencies": []
     },
     {
-      "name": "meta",
-      "version": "1.19.0",
-      "dependencies": []
-    },
-    {
       "name": "leak_tracker_testing",
       "version": "3.0.2",
       "dependencies": [
@@ -194,11 +199,6 @@
       "dependencies": [
         "flutter"
       ]
-    },
-    {
-      "name": "vector_math",
-      "version": "2.4.2",
-      "dependencies": []
     },
     {
       "name": "term_glyph",

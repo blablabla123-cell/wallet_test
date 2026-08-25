@@ -2,15 +2,20 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:wallet_test/features/cards/card_issuer.dart';
 
-class CardIssueEvent {}
+sealed class CardIssueEvent {
+  const CardIssueEvent();
 
-class IssueTapped extends CardIssueEvent {
-  IssueTapped(this.request);
+  @override
+  String toString() => 'CardIssueEvent()';
+}
+
+final class IssueTapped extends CardIssueEvent {
+  const IssueTapped(this.request);
 
   final CardIssueRequest request;
 }
 
-class CardIssueState {
+final class CardIssueState {
   const CardIssueState({
     this.issuing = false,
     this.error,
@@ -23,8 +28,13 @@ class CardIssueState {
 class CardIssueBloc extends Bloc<CardIssueEvent, CardIssueState> {
   CardIssueBloc({
     required ICardIssuer issuer,
-  }) : _issuer = issuer {
-    on<IssueTapped>(_onIssueTapped);
+  })  : _issuer = issuer,
+        super(const CardIssueState()) {
+    on<CardIssueEvent>(
+      (event, emit) => switch (event) {
+        IssueTapped() => _onIssueTapped(event, emit),
+      },
+    );
   }
 
   final ICardIssuer _issuer;

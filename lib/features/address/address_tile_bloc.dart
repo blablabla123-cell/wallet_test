@@ -4,19 +4,30 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:wallet_test/features/address/address_repository.dart';
 
-class AddressTileEvent {}
+sealed class AddressTileEvent {
+  const AddressTileEvent();
 
-class CopyTapped extends AddressTileEvent {
+  @override
+  String toString() => 'AddressTileEvent()';
+}
+
+final class CopyTapped extends AddressTileEvent {
   const CopyTapped(this.address);
 
   final String address;
+
+  @override
+  String toString() => 'CopyTapped(address: $address)';
 }
 
-class ResetCopied extends AddressTileEvent {
+final class ResetCopied extends AddressTileEvent {
   const ResetCopied();
+
+  @override
+  String toString() => 'ResetCopied()';
 }
 
-class AddressTileState {
+final class AddressTileState {
   const AddressTileState({
     this.copied = false,
     this.error,
@@ -39,9 +50,14 @@ class AddressTileState {
 class AddressTileBloc extends Bloc<AddressTileEvent, AddressTileState> {
   AddressTileBloc({
     required IAddressRepository repository,
-  })  : _repository = repository {
-    on<CopyTapped>(_onCopyTapped);
-    on<ResetCopied>(_onResetCopied);
+  })  : _repository = repository,
+        super(const AddressTileState()) {
+    on<AddressTileEvent>(
+      (event, emit) => switch (event) {
+        CopyTapped() => _onCopyTapped(event, emit),
+        ResetCopied() => _onResetCopied(event, emit),
+      },
+    );
   }
 
   final IAddressRepository _repository;
@@ -59,6 +75,7 @@ class AddressTileBloc extends Bloc<AddressTileEvent, AddressTileState> {
       emit(const AddressTileState(copied: true));
 
       _resetTimer?.cancel();
+      _resetTimer = null;
       _resetTimer = Timer(
         const Duration(milliseconds: 1500),
         () => add(const ResetCopied()),
@@ -73,5 +90,12 @@ class AddressTileBloc extends Bloc<AddressTileEvent, AddressTileState> {
     Emitter<AddressTileState> emit,
   ) async {
     emit(const AddressTileState());
+  }
+
+  @override
+  Future<void> close() {
+    _resetTimer?.cancel();
+    _resetTimer = null;
+    return super.close();
   }
 }
