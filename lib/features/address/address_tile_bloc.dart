@@ -6,9 +6,12 @@ import 'package:wallet_test/features/address/address_repository.dart';
 
 sealed class AddressTileEvent {
   const AddressTileEvent();
+
+  @override
+  String toString() => 'AddressTileEvent()';
 }
 
-class CopyTapped extends AddressTileEvent {
+final class CopyTapped extends AddressTileEvent {
   const CopyTapped(this.address);
 
   final String address;
@@ -17,14 +20,14 @@ class CopyTapped extends AddressTileEvent {
   String toString() => 'CopyTapped(address: $address)';
 }
 
-class ResetCopied extends AddressTileEvent {
+final class ResetCopied extends AddressTileEvent {
   const ResetCopied();
 
   @override
   String toString() => 'ResetCopied()';
 }
 
-class AddressTileState {
+final class AddressTileState {
   const AddressTileState({
     this.copied = false,
     this.error,
@@ -49,8 +52,12 @@ class AddressTileBloc extends Bloc<AddressTileEvent, AddressTileState> {
     required IAddressRepository repository,
   })  : _repository = repository,
         super(const AddressTileState()) {
-    on<CopyTapped>(_onCopyTapped);
-    on<ResetCopied>(_onResetCopied);
+    on<AddressTileEvent>(
+      (event, emit) => switch (event) {
+        CopyTapped() => _onCopyTapped(event, emit),
+        ResetCopied() => _onResetCopied(event, emit),
+      },
+    );
   }
 
   final IAddressRepository _repository;
@@ -68,6 +75,7 @@ class AddressTileBloc extends Bloc<AddressTileEvent, AddressTileState> {
       emit(const AddressTileState(copied: true));
 
       _resetTimer?.cancel();
+      _resetTimer = null;
       _resetTimer = Timer(
         const Duration(milliseconds: 1500),
         () => add(const ResetCopied()),

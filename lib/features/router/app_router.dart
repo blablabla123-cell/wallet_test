@@ -1,7 +1,6 @@
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:wallet_test/features/address/address_tile.dart';
 import 'package:wallet_test/features/auth/auth_repository.dart';
 import 'package:wallet_test/features/cards/card_issue_page.dart';
 import 'package:wallet_test/features/cards/cards_page.dart';
@@ -22,13 +21,6 @@ class AppRouter {
     initialLocation: '/wallet',
     refreshListenable: _authChangeNotifier,
     routes: [
-      GoRoute(
-        path: '/address',
-        builder: (context, state) => const AddressTile(
-          address: '0x1234567890abcdef1234567890abcdef12345678',
-          network: 'Ethereum',
-        ),
-      ),
       GoRoute(
         path: '/wallet',
         builder: (context, state) => const WalletPage(),

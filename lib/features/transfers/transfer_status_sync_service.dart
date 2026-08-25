@@ -12,6 +12,13 @@ class TransferStatusSyncService {
   })  : _api = api,
         _repository = repository;
 
+  static const _maxAttempts = 3;
+  static const _retryDelays = [
+    Duration(milliseconds: 200),
+    Duration(milliseconds: 500),
+  ];
+  static const _retryableStatusCodes = {408, 429, 503};
+
   final ApiClient _api;
   final ITransferRepository _repository;
 
@@ -22,109 +29,90 @@ class TransferStatusSyncService {
     final idempotencyKey =
         '${transfer.network.toLowerCase()}:${transfer.txHash}';
 
-    DioException? lastRetryableError;
-
-    for (var attempt = 0; attempt < 3; attempt++) {
+    for (var attempt = 0; attempt < _maxAttempts; attempt++) {
       try {
-        final response = await _api.dio.get(
-          '/v1/transfers/${transfer.txHash}/status',
-          cancelToken: cancelToken,
-          options: Options(
-            headers: <String, String>{
-              'Idempotency-Key': idempotencyKey,
-            },
-          ),
+        final status = await _fetchStatus(
+          transfer.txHash,
+          idempotencyKey,
+          cancelToken,
         );
-
-        final status = TransferStatus.fromName(
-          response.data['status'] as String? ?? 'unknown',
-        );
-
-        try {
-          await _repository.applyStatus(
-            transfer,
-            status,
-            DateTime.now(),
-          );
-        } catch (error) {
-          throw TransferSyncException(
-            code: 'localPersistenceFailed',
-            message: error.toString(),
-          );
-        }
-
+        await _persist(transfer, status);
         return status;
       } on DioException catch (error) {
         if (error.type == DioExceptionType.cancel) {
           throw const CancelException();
         }
 
-        final statusCode = error.response?.statusCode;
-        final retryable = _isRetryable(error);
-
-        if (!retryable) {
+        final canRetry = _isRetryable(error) && attempt < _maxAttempts - 1;
+        if (!canRetry) {
           throw _mapDioException(error);
         }
 
-        lastRetryableError = error;
-
-        if (attempt == 2) {
-          if (statusCode == 408 || statusCode == 429) {
-            throw const TransferSyncException(code: 'rateLimited');
-          }
-          if (statusCode == 503) {
-            throw const TransferSyncException(code: 'serverUnavailable');
-          }
-          throw const TransferSyncException(code: 'network');
-        }
-
-        await Future<void>.delayed(
-          Duration(milliseconds: attempt == 0 ? 200 : 500),
-        );
-
+        await Future<void>.delayed(_retryDelays[attempt]);
         if (cancelToken?.isCancelled ?? false) {
           throw const CancelException();
         }
       }
     }
 
-    throw _mapDioException(lastRetryableError!);
+    throw const TransferSyncException(code: 'network');
+  }
+
+  Future<TransferStatus> _fetchStatus(
+    String txHash,
+    String idempotencyKey,
+    CancelToken? cancelToken,
+  ) async {
+    final response = await _api.dio.get(
+      '/v1/transfers/$txHash/status',
+      cancelToken: cancelToken,
+      options: Options(
+        headers: <String, String>{
+          'Idempotency-Key': idempotencyKey,
+        },
+      ),
+    );
+
+    return TransferStatus.fromName(
+      response.data['status'] as String? ?? TransferStatus.unknown.name,
+    );
+  }
+
+  Future<void> _persist(Transfer transfer, TransferStatus status) async {
+    try {
+      await _repository.applyStatus(transfer, status, DateTime.now());
+    } catch (error) {
+      throw TransferSyncException(
+        code: 'localPersistenceFailed',
+        message: error.toString(),
+      );
+    }
   }
 
   bool _isRetryable(DioException error) {
-    switch (error.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.connectionError:
-      case DioExceptionType.receiveTimeout:
-      case DioExceptionType.sendTimeout:
-        return true;
-      case DioExceptionType.badResponse:
-        return switch (error.response?.statusCode) {
-          408 || 429 || 503 => true,
-          _ => false,
-        };
-      default:
-        return false;
-    }
+    return switch (error.type) {
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.connectionError ||
+      DioExceptionType.receiveTimeout ||
+      DioExceptionType.sendTimeout =>
+        true,
+      DioExceptionType.badResponse =>
+        _retryableStatusCodes.contains(error.response?.statusCode),
+      _ => false,
+    };
   }
 
   TransferSyncException _mapDioException(DioException error) {
-    switch (error.response?.statusCode) {
-      case 401:
-        return const TransferSyncException(code: 'unauthorized');
-      case 404:
-        return const TransferSyncException(code: 'notFound');
-      case 409:
-        return const TransferSyncException(code: 'conflict');
-      case 408:
-      case 429:
-        return const TransferSyncException(code: 'rateLimited');
-      case 503:
-        return const TransferSyncException(code: 'serverUnavailable');
-      case 500:
-        return const TransferSyncException(code: 'internal');
-      default:
-        return const TransferSyncException(code: 'network');
-    }
+    return TransferSyncException(
+      code: switch (error.response?.statusCode) {
+        401 => 'unauthorized',
+        404 => 'notFound',
+        409 => 'conflict',
+        408 || 429 => 'rateLimited',
+        503 => 'serverUnavailable',
+        500 => 'internal',
+        _ => 'network',
+      },
+    );
   }
 }
